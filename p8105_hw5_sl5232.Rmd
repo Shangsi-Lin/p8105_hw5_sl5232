@@ -96,15 +96,51 @@ tibble_total = summarise(homicides_df, total_homicides = n())
 tibble_unsolved =
   homicides_df %>% 
   filter(disposition != "Closed by arrest") %>% 
-  summarise(unsolved_homicides = n())
+  summarise(unsolved_homicides = n()) 
 
-full_join(tibble_total, tibble_unsolved)
+homicides_condition = full_join(tibble_total, tibble_unsolved) %>% 
+  replace(is.na(.), 0)
+
+homicides_condition
 ```
 
 Estimate the proportion of homicides that are unsolved for the city of Baltimore, MD. Save it as an R object and pull the estimated proportion and confidence intervals from the resulting tidy dataframe.
 
 ```{r}
+baltimore_result = 
+  filter(homicides_condition, city_state == "Baltimore,MD")
 
+baltimore_test =
+  prop.test(x = baltimore_result$unsolved_homicides,n = baltimore_result$total_homicides) %>% 
+  broom::tidy()
+
+baltimore_test
 ```
 
+Next, run the similar test for each of the cities in the dataset, and extract both the proportion of unsolved homicides and the confidence interval for each. 
+
+```{r}
+total_test = homicides_condition %>%
+  mutate(prop_test = map2(.x = unsolved_homicides , .y = total_homicides , ~prop.test(x = .x,n = .y))) %>%
+  mutate(prop_test = map(prop_test,broom::tidy)) %>%
+  unnest(prop_test) %>%
+  select(city_state, estimate, starts_with("conf."))
+total_test
+```
+
+Create a plot that shows the estimates and CIs for each city with error bars based on upper and lower limites. The cities are organized according to the proportion of unsolved homicides.
+
+```{r}
+total_test %>%
+  mutate(city_state = fct_reorder(city_state, estimate)) %>%
+  ggplot(aes(x = city_state, y = estimate)) +
+  geom_point() +
+  labs(
+    x = "City,State",
+    y = "Percentage of unsolved homicides",
+    title = "Percentage of unsolved homicides across U.S."
+  )  +
+  theme(axis.text.x = element_text(angle = 90)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) 
+```
 

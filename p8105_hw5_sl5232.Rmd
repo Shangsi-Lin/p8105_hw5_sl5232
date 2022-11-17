@@ -144,3 +144,79 @@ total_test %>%
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) 
 ```
 
+## Problem 3
+
+For n = 30, sigma = 5, set mu = 0 and generate 5000 datasets from the model of a normal distribution, and save mu-hat and the p-value arising from the test of H: mu = 0 using alpha = 0.05. 
+
+```{r sim1}
+simulation = function(size = 30, mu = 0, sigma = 5) {
+  x = rnorm(n = size, mean = mu, sd = sigma)
+  t.test(x, n = size, conf.level = 0.95)
+}
+
+sim_0 = vector("list", length = 100)
+
+for (i in 1:5000) {
+  sim_0[[i]] = simulation() %>% 
+    broom::tidy() %>% 
+    select(estimate, p.value)
+}
+
+bind_rows(sim_0)
+```
+
+Then repeat for mu = {1,2,3,4,5,6}, also combine it with the situation where mu = 0. 
+
+```{r sim2}
+sim_all = expand_grid(
+  sample_size = 30,
+  real_mu = 0:6,
+  iteration = 1:5000
+) %>% 
+  mutate(temp_df = map2(.x = sample_size, .y = real_mu, ~broom::tidy(simulation(size = .x, mu = .y)))) %>% 
+  unnest(temp_df) %>% 
+  select(real_mu, estimate, p.value)
+```
+
+Next, make a plot showing the proportion of times the null was rejected on the y axis and the true value of mu on the x axis.
+
+```{r}
+sim_summary =
+  sim_all %>% 
+  group_by(real_mu) %>% 
+  summarize(sample_size  = n(), rejects = sum(p.value < 0.05), proportion = rejects / sample_size)
+
+ggplot(sim_summary, aes(x = real_mu, y = proportion)) + 
+  geom_point() +
+  geom_line() +
+  labs(
+    title = "Proportion of null rejected vs. Mean Value"
+  )
+```
+
+From the plot we can see that as the real mean value of the data set furthers away from 0, the proportion of null rejected increases, suggesting that the two factors have a negative association.
+
+Next, make a plot showing the average estimate of mu on the y axis and the true value of mu on the x axis. Make another plot that shows the average estimates of mu only in samples for which the null was rejected on the y axis and the true value of mu on the x axis.
+
+```{r}
+sim_all %>% 
+  group_by(real_mu) %>% 
+  summarize(mu_hat = mean(estimate)) %>% 
+  ggplot(aes(x = real_mu, y = mu_hat)) +
+  geom_point() +
+  geom_line()
+```
+
+```{r}
+sim_all %>% 
+  group_by(real_mu) %>% 
+  filter(p.value < 0.05) %>% 
+  summarize(mu_hat = mean(estimate)) %>% 
+  ggplot(aes(x = real_mu, y = mu_hat)) +
+  geom_point() +
+  geom_line()
+```
+
+By comparing the two generated plots above, we conclude that for true value of mean equal to 1, 2, and 3, the sample average for which the null is rejected doesn't approximately equal to the true value of mean, and the difference between the two means decreases as the true value of mean increases for these 3 cases. On the other hand, when the true value of mean equal to 0, 4, 5, and 6, the two means for comparison are approximately equal. 
+
+This is because we tend to have a larger proportion of null rejected as the real mean value increases by the setting of our test. So the number of rejected cases increases with the increasing real mean value, making their mean approximates to the real mean, this explains the observation we see in the case of 4, 5, and 6. For the case of 0, since the null agrees with the real mean, the sum of rejected cases also follows a normal distribution with mean approximately to 0. For the case of 1, 2, and 3, the rejected cases are having higher mean compred to their real mean since cases with mean close to 0(i.e cases with smaller means) aren't rejected and this is more likely to happen with real mean close to 0, thus explaining the trend of decreasing magnitude of mean difference as we go from 1 to 3.
